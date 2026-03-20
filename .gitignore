@@ -1,5 +1,53 @@
-# Codigo
-*.py
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Ejecutables 
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos de configuración local
+config-GUI/local.json
+config-GUI/user.json
+
+# Videos descargados (pero mantener la carpeta)
+temp_downloads/*
+!temp_downloads/.gitkeep
+
+# Archivos de hash generados
+file.json
+file_check_update.json
+
+# Ejecutables
 *.exe
+*.spec
+build/
+dist/
+
+# Logs
+*.log
