@@ -1,186 +1,131 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-YouTube Downloader - Entry Point
-Módulo principal de inicialización de la aplicación.
-"""
-
-import json
 import os
-import sys
-from pathlib import Path
+import json
+from datetime import datetime
+from pytube import YouTube  # o from pytubefix import YouTube
 
-# Importaciones locales
-from frames.root import Root, RUTA_BASE  # Nota: mayúsculas para clases/constantes
-from frames.load_config import load_file, calcular_file
-from frames.idiomas import Idiomas
-from get_hash import (
-    get_directory, 
-    get_hash, 
-    write_dict_hash_dir, 
-    check_updates  # Corregido: cheack_updates → check_updates
-)
-
-
-def load_information(filepath: str = "information.json") -> dict:
-    """
-    Carga metadatos del proyecto desde archivo JSON.
-    
-    Args:
-        filepath: Ruta al archivo de información
-        
-    Returns:
-        Diccionario con metadatos del proyecto
-        
-    Raises:
-        FileNotFoundError: Si no existe el archivo
-        json.JSONDecodeError: Si el JSON es inválido
-    """
-    try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            return json.load(f)  # Mejor que literal_eval para JSON
-    except FileNotFoundError:
-        print(f"Error: No se encontró {filepath}")
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"Error: JSON inválido en {filepath}: {e}")
-        sys.exit(1)
-
-
-def display_app_info(info: dict) -> None:
-    """Muestra información de la aplicación formateada."""
-    version = info.get("version", "desconocida")
-    doc = info.get("doc", "Sin documentación")
-    autor = info.get("autor", {})
-    contribuidores = info.get("contribuidores", [])
-    
-    separador = "=" * 40
-    
-    print(f"\n{separador}")
-    print(f"Versión del software -> {version}")
-    print(f"{separador}")
-    print(f"Documentación -> {doc}")
-    print(f"{separador}")
-    
-    if contribuidores:
-        print("Contribuidores:")
-        for contrib in contribuidores:
-            print(f"  Usuario: {contrib.get('usuario', 'N/A')}")
-            print(f"  GitHub:  {contrib.get('github', 'N/A')}")
-            print("-" * 40)
-    
-    print(f"Autor principal:")
-    print(f"  Usuario: {autor.get('usuario', 'N/A')}")
-    print(f"  GitHub:  {autor.get('github', 'N/A')}")
-    print(f"{separador}\n")
-
-
-def check_for_updates() -> bool:
-    """
-    Verifica si hay actualizaciones disponibles.
-    
-    Returns:
-        True si hay actualización, False en caso contrario
-    """
-    print("Comprobando actualizaciones...")
-    
-    try:
-        tree_dir = get_directory(debug=False)
-        dict_hash_dir = get_hash(tree_dir)
-        write_dict_hash_dir(dict_hash_dir)
-        
-        return check_updates()  # Nombre corregido
-    except Exception as e:
-        print(f"Advertencia: No se pudo verificar actualizaciones: {e}")
-        return False
-
-
-def setup_working_directory(ruta_config: str) -> None:
-    """
-    Configura el directorio de trabajo según la plataforma.
-    
-    Args:
-        ruta_config: Ruta al archivo de configuración
-    """
-    if sys.platform == "win32":
-        # Usar Path para manipulación segura de rutas
-        path_obj = Path(ruta_config)
-        nuevo_dir = path_obj.parent.parent  # Subir dos niveles
-        try:
-            os.chdir(nuevo_dir)
-            print(f"Directorio cambiado a: {nuevo_dir}")
-        except OSError as e:
-            print(f"Error al cambiar directorio: {e}")
-
-
-def initialize_gui(config_data: dict) -> None:
-    """
-    Inicializa la interfaz gráfica con la configuración cargada.
-    
-    Args:
-        config_data: Diccionario con configuración de la GUI
-    """
-    try:
-        idioma = Idiomas(config_data["lenguaje"])
-        tamano = config_data["size"]
-        color_fondo = config_data["color-background"]
-        
-        # Crear instancia de la clase Root (renombrada para evitar conflicto)
-        app = Root(
-            idioma=idioma,
-            tamano_ventana=tamano,
-            color_fondo=color_fondo
+def get_download_directory():
+    """Determina directorio de descarga según el entorno"""
+    if os.getenv('GITHUB_ACTIONS') == 'true':
+        # Usar directorio temporal del runner
+        temp_dir = os.getenv('RUNNER_TEMP', '/tmp')
+        download_dir = os.path.join(temp_dir, 'youtube_downloads')
+    else:
+        download_dir = os.path.join(
+            os.path.expanduser('~'), 
+            'Downloads', 
+            'YouTube_Downloader'
         )
-        
-        app.root.mainloop()
-        
-    except KeyError as e:
-        print(f"Error: Configuración incompleta, falta clave: {e}")
-        raise
+    
+    os.makedirs(download_dir, exist_ok=True)
+    return download_dir
 
-
-def main() -> int:
+def descargar_video_con_metadatos(url, calidad='highest'):
     """
-    Punto de entrada principal de la aplicación.
-    
-    Returns:
-        Código de salida (0 = éxito, 1 = error)
+    Descarga video y guarda metadatos en archivo JSON
     """
-    # Cargar metadatos
-    info = load_information()
-    
-    # Verificar actualizaciones
-    if check_for_updates():
-        print("¡Hay una nueva versión de este software disponible!")
-    
-    # Mostrar información
-    display_app_info(info)
-    
     try:
-        # Calcular ruta de configuración
-        ruta_config = calcular_file(RUTA_BASE, "config-GUI")
-        print(f"Ruta de configuración: {ruta_config}")
+        download_dir = get_download_directory()
+        print(f"📁 Directorio: {download_dir}")
         
-        # Configurar directorio de trabajo
-        setup_working_directory(ruta_config)
+        # Crear objeto YouTube
+        yt = YouTube(url)
         
-        # Cargar configuración
-        config_data = load_file(ruta_config)
-        print(f"Configuración cargada: {config_data}")
+        print(f"🎬 Título: {yt.title}")
+        print(f"👤 Canal: {yt.author}")
+        print(f"⏱️  Duración: {yt.length} segundos")
         
-        # Iniciar GUI
-        initialize_gui(config_data)
+        # Extraer metadatos completos
+        metadatos = {
+            'titulo': yt.title,
+            'descripcion': yt.description,  # Descripción completa del video
+            'canal': yt.author,
+            'url': url,
+            'duracion_segundos': yt.length,
+            'duracion_formateada': f"{yt.length // 60}:{yt.length % 60:02d}",
+            'vistas': yt.views,
+            'fecha_publicacion': str(yt.publish_date) if yt.publish_date else 'Desconocida',
+            'video_id': yt.video_id,
+            'thumbnail_url': yt.thumbnail_url,
+            'keywords': yt.keywords if hasattr(yt, 'keywords') else [],
+            'fecha_descarga': datetime.now().isoformat(),
+            'calidad_descarga': calidad
+        }
         
-    except KeyboardInterrupt:
-        print("\nSaliendo por interrupción del usuario...")
-        return 0
+        # Guardar metadatos en archivo JSON
+        metadata_file = os.path.join(download_dir, f"{yt.video_id}_metadatos.json")
+        with open(metadata_file, 'w', encoding='utf-8') as f:
+            json.dump(metadatos, f, ensure_ascii=False, indent=2)
+        print(f"💾 Metadatos guardados: {metadata_file}")
+        
+        # Guardar descripción en TXT (más legible para noticias)
+        descripcion_file = os.path.join(download_dir, f"{yt.video_id}_descripcion.txt")
+        with open(descripcion_file, 'w', encoding='utf-8') as f:
+            f.write(f"TÍTULO: {yt.title}\n")
+            f.write(f"CANAL: {yt.author}\n")
+            f.write(f"URL: {url}\n")
+            f.write(f"FECHA: {metadatos['fecha_publicacion']}\n")
+            f.write(f"DURACIÓN: {metadatos['duracion_formateada']}\n")
+            f.write("=" * 50 + "\n")
+            f.write("DESCRIPCIÓN:\n")
+            f.write("=" * 50 + "\n")
+            f.write(yt.description or "Sin descripción")
+        print(f"📝 Descripción guardada: {descripcion_file}")
+        
+        # Descargar video
+        if calidad == 'highest':
+            stream = yt.streams.get_highest_resolution()
+        elif calidad == 'audio':
+            stream = yt.streams.get_audio_only()
+        else:
+            stream = yt.streams.get_lowest_resolution()
+        
+        # Nombre de archivo seguro
+        safe_title = "".join([c for c in yt.title if c.isalpha() or c.isdigit() or c==' ']).rstrip()
+        video_filename = f"{yt.video_id}_{safe_title[:50]}.mp4"
+        video_path = os.path.join(download_dir, video_filename)
+        
+        print(f"⬇️  Descargando video...")
+        stream.download(output_path=download_dir, filename=video_filename)
+        
+        # Verificar tamaño
+        file_size = os.path.getsize(video_path)
+        print(f"✅ Video guardado: {video_path}")
+        print(f"📊 Tamaño: {file_size / 1024 / 1024:.2f} MB")
+        
+        return {
+            'video_path': video_path,
+            'metadata_path': metadata_file,
+            'descripcion_path': descripcion_file,
+            'video_id': yt.video_id,
+            'titulo': yt.title,
+            'tamaño_mb': file_size / 1024 / 1024
+        }
         
     except Exception as e:
-        print(f"\nError fatal: {e}")
-        return 1
-    
-    return 0
-
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 if __name__ == "__main__":
-    sys.exit(main())
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Descargar video de YouTube con metadatos')
+    parser.add_argument('--url', required=True, help='URL del video de YouTube')
+    parser.add_argument('--calidad', default='highest', choices=['highest', 'lowest', 'audio'])
+    args = parser.parse_args()
+    
+    resultado = descargar_video_con_metadatos(args.url, args.calidad)
+    
+    if resultado:
+        print(f"\n{'='*60}")
+        print("RESUMEN DE DESCARGA:")
+        print(f"{'='*60}")
+        print(f"Video: {resultado['video_path']}")
+        print(f"Metadatos: {resultado['metadata_path']}")
+        print(f"Descripción: {resultado['descripcion_path']}")
+        print(f"Tamaño: {resultado['tamaño_mb']:.2f} MB")
+        print(f"{'='*60}")
+    else:
+        print("La descarga falló")
+        exit(1)
