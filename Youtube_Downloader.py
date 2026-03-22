@@ -1,7 +1,7 @@
 import os
 import json
 from datetime import datetime
-from pytubefix import YouTube
+import yt_dlp
 
 def get_download_directory():
     """Determina directorio de descarga según el entorno"""
@@ -20,78 +20,105 @@ def get_download_directory():
 
 def descargar_video_con_metadatos(url, calidad='highest'):
     """
-    Descarga video y guarda metadatos en archivo JSON
+    Descarga video y guarda metadatos usando yt-dlp
     """
     try:
         download_dir = get_download_directory()
         print(f"📁 Directorio: {download_dir}")
         
-        yt = YouTube(url)
-        
-        print(f"🎬 Título: {yt.title}")
-        print(f"👤 Canal: {yt.author}")
-        print(f"⏱️  Duración: {yt.length} segundos")
-        
-        metadatos = {
-            'titulo': yt.title,
-            'descripcion': yt.description,
-            'canal': yt.author,
-            'url': url,
-            'duracion_segundos': yt.length,
-            'duracion_formateada': f"{yt.length // 60}:{yt.length % 60:02d}",
-            'vistas': yt.views,
-            'fecha_publicacion': str(yt.publish_date) if yt.publish_date else 'Desconocida',
-            'video_id': yt.video_id,
-            'thumbnail_url': yt.thumbnail_url,
-            'keywords': yt.keywords if hasattr(yt, 'keywords') else [],
-            'fecha_descarga': datetime.now().isoformat(),
-            'calidad_descarga': calidad
-        }
-        
-        metadata_file = os.path.join(download_dir, f"{yt.video_id}_metadatos.json")
-        with open(metadata_file, 'w', encoding='utf-8') as f:
-            json.dump(metadatos, f, ensure_ascii=False, indent=2)
-        print(f"💾 Metadatos guardados: {metadata_file}")
-        
-        descripcion_file = os.path.join(download_dir, f"{yt.video_id}_descripcion.txt")
-        with open(descripcion_file, 'w', encoding='utf-8') as f:
-            f.write(f"TÍTULO: {yt.title}\n")
-            f.write(f"CANAL: {yt.author}\n")
-            f.write(f"URL: {url}\n")
-            f.write(f"FECHA: {metadatos['fecha_publicacion']}\n")
-            f.write(f"DURACIÓN: {metadatos['duracion_formateada']}\n")
-            f.write("=" * 50 + "\n")
-            f.write("DESCRIPCIÓN:\n")
-            f.write("=" * 50 + "\n")
-            f.write(yt.description or "Sin descripción")
-        print(f"📝 Descripción guardada: {descripcion_file}")
-        
+        # Configurar formato según calidad
         if calidad == 'highest':
-            stream = yt.streams.get_highest_resolution()
+            format_spec = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
         elif calidad == 'audio':
-            stream = yt.streams.get_audio_only()
-        else:
-            stream = yt.streams.get_lowest_resolution()
+            format_spec = 'bestaudio[ext=m4a]/bestaudio'
+        else:  # lowest
+            format_spec = 'worst[ext=mp4]/worst'
         
-        safe_title = "".join([c for c in yt.title if c.isalpha() or c.isdigit() or c==' ']).rstrip()
-        video_filename = f"{yt.video_id}_{safe_title[:50]}.mp4"
-        video_path = os.path.join(download_dir, video_filename)
-        
-        print(f"⬇️  Descargando video...")
-        stream.download(output_path=download_dir, filename=video_filename)
-        
-        file_size = os.path.getsize(video_path)
-        print(f"✅ Video guardado: {video_path}")
-        print(f"📊 Tamaño: {file_size / 1024 / 1024:.2f} MB")
-        
-        return {
-            'video_path': video_path,
-            'metadata_path': metadata_file,
-            'descripcion_path': descripcion_file,
-            'video_id': yt.video_id,
-            'titulo': yt.title,
-            'tamaño_mb': file_size / 1024 / 1024
+        ydl_opts = {
+            'format': format_spec,
+            'outtmpl': os.path.join(download_dir, '%(id)s_%(title).50s.%(ext)s'),
+            'quiet': False,
+            'no_warnings': False,
         }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # Extraer info sin descargar primero
+            print("🔍 Obteniendo información del video...")
+            info = ydl.extract_info(url, download=False)
+            
+            print(f"🎬 Título: {info.get('title', 'Desconocido')}")
+            print(f"👤 Canal: {info.get('uploader', 'Desconocido')}")
+            print(f"⏱️  Duración: {info.get('duration', 0)} segundos")
+            
+            # Crear metadatos
+            duration = info.get('duration', 0)
+            metadatos = {
+                'titulo': info.get('title'),
+                'descripcion': info.get('description'),
+                'canal': info.get('uploader'),
+                'url': url,
+                'url_canonical': info.get('webpage_url'),
+                'duracion_segundos': duration,
+                'duracion_formateada': f"{duration // 60}:{duration % 60:02d}" if duration else "N/A",
+                'vistas': info.get('view_count'),
+                'fecha_publicacion': info.get('upload_date'),
+                'video_id': info.get('id'),
+                'thumbnail_url': info.get('thumbnail'),
+                'tags': info.get('tags', []),
+                'categorias': info.get('categories', []),
+                'fecha_descarga': datetime.now().isoformat(),
+                'calidad_descarga': calidad,
+                'formato': info.get('format'),
+                'resolucion': info.get('resolution'),
+            }
+            
+            video_id = info.get('id')
+            
+            # Guardar metadatos JSON
+            metadata_file = os.path.join(download_dir, f"{video_id}_metadatos.json")
+            with open(metadata_file, 'w', encoding='utf-8') as f:
+                json.dump(metadatos, f, ensure_ascii=False, indent=2)
+            print(f"💾 Metadatos guardados: {metadata_file}")
+            
+            # Guardar descripción en TXT
+            descripcion_file = os.path.join(download_dir, f"{video_id}_descripcion.txt")
+            with open(descripcion_file, 'w', encoding='utf-8') as f:
+                f.write(f"TÍTULO: {info.get('title', 'N/A')}\n")
+                f.write(f"CANAL: {info.get('uploader', 'N/A')}\n")
+                f.write(f"URL: {url}\n")
+                f.write(f"URL CANONICAL: {info.get('webpage_url', 'N/A')}\n")
+                f.write(f"FECHA: {info.get('upload_date', 'N/A')}\n")
+                f.write(f"DURACIÓN: {metadatos['duracion_formateada']}\n")
+                f.write(f"VISTAS: {info.get('view_count', 'N/A')}\n")
+                f.write("=" * 50 + "\n")
+                f.write("DESCRIPCIÓN:\n")
+                f.write("=" * 50 + "\n")
+                f.write(info.get('description') or "Sin descripción")
+            print(f"📝 Descripción guardada: {descripcion_file}")
+            
+            # Descargar video
+            print(f"⬇️  Descargando video...")
+            ydl.download([url])
+            
+            # Encontrar el archivo descargado
+            downloaded_files = [f for f in os.listdir(download_dir) if f.startswith(video_id) and not f.endswith(('.json', '.txt'))]
+            if downloaded_files:
+                video_path = os.path.join(download_dir, downloaded_files[0])
+                file_size = os.path.getsize(video_path)
+                print(f"✅ Video guardado: {video_path}")
+                print(f"📊 Tamaño: {file_size / 1024 / 1024:.2f} MB")
+                
+                return {
+                    'video_path': video_path,
+                    'metadata_path': metadata_file,
+                    'descripcion_path': descripcion_file,
+                    'video_id': video_id,
+                    'titulo': info.get('title'),
+                    'tamaño_mb': file_size / 1024 / 1024
+                }
+            else:
+                print("⚠️  No se encontró el archivo descargado")
+                return None
         
     except Exception as e:
         print(f"❌ Error: {e}")
