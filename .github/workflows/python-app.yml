@@ -1,7 +1,7 @@
 name: Descargar Video YouTube - 72h Retención
 
 on:
-  workflow_dispatch:  # Ejecución manual
+  workflow_dispatch:
     inputs:
       video_url:
         description: 'URL del video de YouTube (noticias, etc.)'
@@ -24,7 +24,7 @@ on:
 jobs:
   descargar:
     runs-on: ubuntu-latest
-    timeout-minutes: 45  # Videos largos pueden tardar
+    timeout-minutes: 45
     
     steps:
       - name: Checkout código
@@ -43,8 +43,7 @@ jobs:
 
       - name: Instalar dependencias Python
         run: |
-          pip install -r requirements.txt
-          pip install pytube  # o pytubefix
+          pip install yt-dlp
 
       - name: Verificar espacio disponible
         run: df -h
@@ -70,8 +69,7 @@ jobs:
           ls -lh $RUNNER_TEMP/youtube_downloads/ || echo "No se encontraron archivos"
           echo "======================================"
           
-          # Contar archivos
-          VIDEO_COUNT=$(find $RUNNER_TEMP/youtube_downloads/ -name "*.mp4" | wc -l)
+          VIDEO_COUNT=$(find $RUNNER_TEMP/youtube_downloads/ -name "*.mp4" -o -name "*.webm" -o -name "*.mkv" | wc -l)
           META_COUNT=$(find $RUNNER_TEMP/youtube_downloads/ -name "*.json" | wc -l)
           TXT_COUNT=$(find $RUNNER_TEMP/youtube_downloads/ -name "*.txt" | wc -l)
           
@@ -97,9 +95,9 @@ jobs:
         with:
           name: video-y-metadatos-${{ github.run_number }}-${{ github.event.inputs.categoria }}
           path: ${{ runner.temp }}/youtube_downloads/*
-          retention-days: 3  # ⭐ 72 HORAS EXACTAMENTE [^50^][^51^][^89^]
+          retention-days: 3
           if-no-files-found: error
-          compression-level: 6  # Compresión media para videos
+          compression-level: 6
 
       - name: Resumen final
         if: always()
